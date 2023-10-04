@@ -16,9 +16,6 @@ end
 @methods = Methods.new({debug_mode: @debug_mode})
 
 def get_prime
-    # puts %{\nEnter binary length for prime number}
-    # len = gets.strip.to_i
-    # len = 15
 
     first_num = 0
 
@@ -30,16 +27,13 @@ def get_prime
 end
 
 def get_int
-    # puts %{\nEnter binary length for random secret number}
-    # len = gets.strip.to_i
-    # len = 10
 
     @methods.gen_random_int(@len)
 end
 
 def apply_gn
     puts %{\nAlice and Bob applying prime numbers(g, n)} if !@units
-    open_keys = {g: get_prime, n: get_prime}
+    open_keys = {g: @methods.find_primitive_root(get_prime), n: get_prime}
     puts %{\nApplied: (g,n) = (#{open_keys[:g]}, #{open_keys[:n]})} if !@units
 
     open_keys
@@ -103,7 +97,7 @@ def diffie_hellman
     show_client(b_client) if !@units
 
     return a_client[:secret_key] == b_client[:secret_key] if @units
-
+    
     puts
 end
 

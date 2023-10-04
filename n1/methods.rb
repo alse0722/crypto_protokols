@@ -8,14 +8,11 @@ class Methods
 
         raise 'Not enough number length!' if length == 0
 
-        # srand(Time.now.to_f)
-        
         bin_str = ''
         num = 0
 
         while num == 0
             length.times do 
-                # srand(Time.now.to_f)
                 bin_str += rand(2).to_s
             end
 
@@ -52,5 +49,47 @@ class Methods
         result
     end
 
+    def find_factors(n)
+        factors = []
+        (2..Math.sqrt(n).to_i).each do |i|
+            while n % i == 0
+                factors << i
+                n /= i
+            end
+        end
+        if n > 1
+            factors << n
+        end
+        
+        return factors.uniq
+    end
+
+    def find_primitive_root(p)
+        if !is_prime(p)
+            return nil
+        end
+      
+        phi = p - 1
+        factors = find_factors(phi)
+      
+        (2...p).each do |g|
+            is_primitive_root = true
+
+            factors.each do |factor|
+                if g.pow(phi / factor, p) == 1
+                    is_primitive_root = false
+                    break
+                end
+            end
+            if is_primitive_root
+                return g
+            end
+        end
+      
+        return nil
+    end
+
 
 end
+
+# puts Methods.new(debug_mode: true).find_primitive_root(23)

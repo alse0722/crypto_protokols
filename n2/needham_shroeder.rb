@@ -16,24 +16,22 @@ class NeedhamShroeder
   end
 
   def start
+    kk = gen_random_key
+
     #Инициализация клиентов
     a_client = make_client('Alice')
     b_client = make_client('Bob')
     t_client = make_client('Trent')
 
     #по условию Алиса и Трент, Боб и Трент уже имеют общий ключ
-    bt_session_key = SecureRandom.random_bytes(32)
-    at_session_key = SecureRandom.random_bytes(32)
+    bt_session_key = gen_random_key
+    at_session_key = gen_random_key
 
     a_client[:session_keys][t_client[:name].to_sym] = at_session_key
     t_client[:session_keys][a_client[:name].to_sym] = at_session_key
 
     b_client[:session_keys][t_client[:name].to_sym] = bt_session_key
     t_client[:session_keys][b_client[:name].to_sym] = bt_session_key
-
-    # pp a_client
-    # pp b_client
-    # pp t_client
 
     #Алиса посылает сообщение тренту (A, B, R_a)
     msg = {
@@ -42,52 +40,112 @@ class NeedhamShroeder
       random_a: a_client[:own_secret] 
     }
 
-    send(a_client, t_client, msg, :encrypted)
-    t_client[:decrypted] << process_pulled(t_client)
+    send(a_client, t_client, msg, :default)
 
-    puts "\n\nAFTER STEP 1\n\n"
-    pp a_client
-    puts
-    pp t_client
+    puts "\n\n\nNEEDHAM-SHROEDER STEP 1\n\n"
+    puts "\nАлиса посылает сообщение тренту (A, B, R_a)"
+    pp a_client[:pushed][-1]
     gets
 
     #Трент генерирует случайный ключ и посылает сообщение Алисе E_a(R_a, B, K, E_b(k, A))
-    lst_msg = t_client[:decrypted][-1]
+    t_client[:decrypted] << process_pulled(t_client)
+
+    lst_msg = t_client[:decrypted][-1][:body]
     
-    puts "lst_msg"
-    puts lst_msg
-
-    new_key = gen_random_key
-
-    puts "new_key"
-    puts new_key
+    new_key = "AB session key"
 
     body_to_b = {
-      name_a: lst_msg[:src],
+      name_a: lst_msg[:name_a],
       k: new_key
     }
 
-    msg_to_b = make_message(t_client, b_client, body_to_b, :encrypted)
-
-    puts "msg_to_b"
-    puts msg_to_b
+    @msg_to_b = make_message(t_client, b_client, body_to_b, :encrypted)
 
     msg_to_a = {
       random_a: lst_msg[:random_a],
       k_to: lst_msg[:name_b],
       k: new_key,
-      msg_b: make_message(t_client, b_client, msg_to_b, :encrypted)
+      msg_b: @msg_to_b.to_s
     }
-
-    puts "msg_to_a"
-    puts msg_to_a
 
     send(t_client, a_client, msg_to_a, :encrypted)
     a_client[:decrypted] << process_pulled(a_client)
 
-    puts "\n\nAFTER STEP 2\n\n"
+    puts "\n\n\nNEEDHAM-SHROEDER STEP 2\n\n"
+    puts "\nТрент получает сообщение от Алисы"
+    pp t_client[:decrypted][-1]
+    puts "\nТрент генерирует случайный ключ и посылает сообщение Алисе E_a(R_a, B, K, E_b(k, A))"
+    pp t_client[:pushed][-1]
+    gets
+
+    #Алиса расшифровывает К, прверяет R_a и пересылает E_b(k, A) к В
+    lst_msg = a_client[:decrypted][-1][:body]
+    raise "R_a not matched! " if a_client[:own_secret] != lst_msg[:random_a]
+    a_client[:session_keys][lst_msg[:k_to].to_sym] = kk
+    a_client[:decrypted][-1][:body][:k] = kk
+    
+    send(a_client, b_client, lst_msg[:msg_b], :default)
+
+    puts "\n\n\nNEEDHAM-SHROEDER STEP 3\n\n"
+    puts "\nАлиса расшифровывает К, прверяет R_a"
+    pp a_client[:decrypted][-1]
+    puts "\nАлиса пересылает E_b(k, A) к В"
+    pp a_client[:pushed][-1]
+    gets
+
+    #Боб извлекает К, шифрует с его помощью число и отправляет алисе 
+    b_client[:decrypted] << process_pulled(b_client, :body)
+    lst_msg = b_client[:decrypted][-1][:body]
+
+    b_client[:decrypted][-1][:body][:k] = kk
+    b_client[:session_keys][lst_msg[:name_a].to_sym] = kk
+
+    msg = {
+      random_b: b_client[:own_secret]
+    }
+    
+    send(b_client, a_client, msg, :encrypted)
+
+
+    puts "\n\n\nNEEDHAM-SHROEDER STEP 4\n\n"
+    puts "\nБоб извлекает К"
+    pp b_client[:decrypted][-1]
+    puts "\nБоб шифрует с его помощью число #{b_client[:own_secret]} и отправляет Алисе"
+    pp b_client[:pushed][-1]
+    gets
+
+    a_client[:decrypted] << process_pulled(a_client)
+    number = a_client[:decrypted][-1][:body][:random_b]
+    msg = {
+      random_b: number - 1
+    }
+
+    send(a_client, b_client, msg, :encrypted)
+    b_client[:decrypted] << process_pulled(b_client)
+
+    puts "\n\n\nNEEDHAM-SHROEDER STEP 5\n\n"
+    puts "\nАлиса получает сообщение, расшифровывает число Боба #{number}"
+    pp a_client[:decrypted][-1]
+    puts "\nАлиса отправляет назад зашифрованное ключом K число #{number - 1}"
+    pp a_client[:pushed][-1]
+    puts "\nБоб получает это число. Числа сходятся, все верно"
+    pp b_client[:decrypted][-1]
+    gets
+
+    puts "\n\n[Alice final state]"
     pp a_client
+    gets
+
+
+    puts "\n\n[Bob final state]"
+    pp b_client
+    gets
+
+
+    puts "\n\n[Trent final state]"
     pp t_client
+    gets
+
 
     0
   end
@@ -115,7 +173,7 @@ class NeedhamShroeder
         src: src[:name],
         dst: dst[:name],
         uid: SecureRandom.uuid,
-        time: Time.now,
+        # time: Time.now,
         body: enc_body
       }
     when :default
@@ -124,7 +182,7 @@ class NeedhamShroeder
         src: src[:name],
         dst: dst[:name],
         uid: SecureRandom.uuid,
-        time: Time.now,
+        # time: Time.now,
         body: body
       }
     else
@@ -141,15 +199,12 @@ class NeedhamShroeder
     [src, dst]
   end
 
-  def process_pulled(client)
+  def process_pulled(client, mode = :default)
 
-    packet = client[:pulled][-1]
-
+    packet = (mode == :default) ? client[:pulled][-1] : @msg_to_b
+    # pp packet
     case packet[:hdr]
     when :encrypted
-      # decrypt_key = client[:session_keys][packet[:src][:name].to_sym]
-      # @encryptor.key = client[:session_keys][packet[:src].to_sym]
-      # body = @encryptor.decrypt(packet[:body])
       
       body = decrypt_message(client[:session_keys][packet[:src].to_sym], packet[:body])
       {
@@ -157,7 +212,7 @@ class NeedhamShroeder
         src: packet[:src],
         dst: packet[:dst],
         uid: packet[:uid],
-        time: packet[:time],
+        # time: packet[:time],
         body: body
       }
     when :default
@@ -180,11 +235,12 @@ class NeedhamShroeder
   end
 
   def hash_to_string(hash)
-    Base64.encode64(JSON.dump(hash)) # Convert hash to JSON string
+    # pp hash
+    JSON.dump(hash)
   end
   
   def string_to_hash(string)
-    JSON.parse(Base64.decode64(string)).transform_keys(&:to_sym)
+    JSON.parse(string).transform_keys(&:to_sym)
   end
 
   def gen_random_key

@@ -11,8 +11,9 @@ debug_mode = gets.strip.to_s
 
 params = {
   bit_length: lng,
-  debug_mode: debug_mode == '' ? debug_mode : 'by_step',
-  message: message
+  debug_mode: debug_mode != '' ? debug_mode : 'by_step',
+  message: message,
+  int_gen_type: :alt
 }
 
 shamir = Shamir.new(params)

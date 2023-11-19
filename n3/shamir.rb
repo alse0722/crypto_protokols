@@ -1,12 +1,14 @@
 require './coder.rb'
 require 'prime'
 require 'securerandom'
+require 'openssl'
 
 class Shamir
   def initialize(params = {})
     @debug_mode = params.dig(:debug_mode).to_sym
     @bit_length = params.dig(:bit_length).to_i
     @message = params.dig(:message)
+    @int_gen_type = params.dig(:int_gen_type)
   end
 
   def start
@@ -15,7 +17,7 @@ class Shamir
   def step0
     puts "\n\n-----------------[STEP 0]-----------------\n\n"
 
-    prime = gen_large_p
+    prime = gen_large_p(@int_gen_type)
 
     @alice = make_client('Alice', prime)
     @bob = make_client('Bob', prime)
@@ -163,17 +165,23 @@ class Shamir
     }
   end
 
-  def gen_large_p
-    loop do
-      candidate = rand(2 ** @bit_length)
-      # pp candidate
-      next if candidate.even?
-    
-      if Prime.prime?(candidate)
-        factors = Prime.prime_division(candidate - 1)
-        largest_prime_factor = factors[-1][0]
-        return candidate if largest_prime_factor > Math.sqrt(candidate).to_i
+  def gen_large_p(mode = :default)
+    case mode
+    when :default
+      loop do
+        candidate = rand(2 ** @bit_length)
+        # pp candidate
+        next if candidate.even?
+      
+        if Prime.prime?(candidate)
+          factors = Prime.prime_division(candidate - 1)
+          largest_prime_factor = factors[-1][0]
+          return candidate if largest_prime_factor > Math.sqrt(candidate).to_i
+        end
       end
+    when :alt
+      OpenSSL::BN.generate_prime(@bit_length).to_i
     end
   end
+
 end
